@@ -1,0 +1,115 @@
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+
+filter_kernels = [
+    np.array([
+        [-1, -1, 1, 1],
+        [-1, -1, 1, 1],
+        [ 1,  1, -1, -1],
+        [ 1,  1, -1, -1]
+    ]),
+    np.array([
+        [-1, -1, -1, -1],
+        [-1, -1, -1, -1],
+        [ 1,  1,  1,  1],
+        [ 1,  1,  1,  1]
+    ]),
+    np.array([
+        [-1, -1,  1,  1],
+        [-1, -1,  1,  1],
+        [-1, -1,  1,  1],
+        [-1, -1,  1,  1]
+    ]),
+    np.array([
+        [ 1,  1, -1, -1],
+        [ 1,  1, -1, -1],
+        [-1, -1,  1,  1],
+        [-1, -1,  1,  1]
+    ]),
+    np.array([
+        [-1, -1, -1, -1],
+        [-1, -1, -1, -1],
+        [-1, -1,  1,  1],
+        [-1, -1,  1,  1]
+    ]),
+    np.array([
+        [ 1,  1,  1,  1],
+        [ 1, -1, -1, -1],
+        [ 1, -1, -1, -1],
+        [ 1, -1, -1, -1]
+    ])
+]
+
+image = cv2.imread("iitk.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
+
+def compute_summed_area(img):
+    height, width = img.shape
+    summed_area = np.zeros((height + 1, width + 1), dtype=np.float32)
+
+    for row in range(height):
+        row_accum = 0.0
+        for col in range(width):
+            row_accum += img[row, col]
+            summed_area[row + 1, col + 1] = summed_area[row, col + 1] + row_accum
+
+    return summed_area
+
+integral_img = compute_summed_area(image)
+
+def compute_region_sum(integral_img, y, x, h, w):
+    return (integral_img[y + h, x + w]
+            - integral_img[y, x + w]
+            - integral_img[y + h, x]
+            + integral_img[y, x])
+
+def apply_filter(integral_img, kernel):
+    img_height, img_width = integral_img.shape[0] - 1, integral_img.shape[1] - 1
+    output_height, output_width = img_height - 3, img_width - 3
+    filtered_response = np.zeros((output_height, output_width), dtype=np.float32)
+
+    for row in range(output_height):
+        for col in range(output_width):
+            conv_sum = 0.0
+            for f_row in range(4):
+                for f_col in range(4):
+                    coeff = kernel[f_row, f_col]
+                    pixel = compute_region_sum(integral_img, row + f_row, col + f_col, 1, 1)
+                    conv_sum += coeff * pixel
+            filtered_response[row, col] = conv_sum
+    return filtered_response
+
+filter_outputs = []
+for idx, kernel in enumerate(filter_kernels, 1):
+    response = apply_filter(integral_img, kernel)
+    filter_outputs.append(response)
+    
+    
+    print(f"\nFilter {idx} output values:\n{response}")
+
+
+for idx, output in enumerate(filter_outputs, 1):
+    plt.figure(figsize=(6, 4))
+    plt.title(f"Filter {idx}")
+    plt.imshow(output, cmap='gray')
+    plt.colorbar(label='Intensity')
+    plt.show()
+
+for idx, response in enumerate(filter_outputs, 1):
+    min_value, max_value = response.min(), response.max()
+    print(f"\nFilter {idx} raw response range: [{min_value}, {max_value}]")
+
+    if max_value > min_value:
+        norm_response = (response - min_value) / (max_value - min_value)
+    else:
+        norm_response = np.zeros_like(response)
+
+    scaled_response = (norm_response * 255).astype(np.uint8)
+
+    plt.figure(figsize=(6, 6))
+    plt.title(f"(Normalized) Filter {idx}")
+    plt.imshow(scaled_response, cmap='gray', vmin=0, vmax=255)
+    plt.colorbar(label='Intensity')
+    plt.show()
+
+    print(f"Filter {idx}'s normalized response vals:\n{scaled_response}")
